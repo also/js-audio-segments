@@ -2,41 +2,47 @@ window.AudioContext = webkitAudioContext;
 
 window.AudioBuffer = new AudioContext().createBuffer(0, 0, 0).constructor;
 
-AudioBuffer.prototype.extract = function (target, length, startPosition) {
-    var channelData = [];
-    for (var i = 0; i < this.numberOfChannels; i++) {
-        channelData.push(this.getChannelData(i).slice(startPosition, startPosition + length));
-    }
-    target.push(new FakeAudioBuffer(this.sampleRate, channelData));
-    return channelData[0].length;
-}
+var TWO_CHANNELS = 2;
+var SAMPLE_RATE = 2;
 
-function Target() {
-    this._buffers = [];
-    this.push = _.bind(this._buffers.push, this._buffers);
-}
+var BufferMethods = {
+    slice: function (begin, end) {
+        var channelData = [];
+        var i;
+        var end = end || this.length;
+        for (i = 0; i < this.numberOfChannels; i++) {
+            channelData.push(this.getChannelData(i).slice(begin, end));
+        }
+        return new FakeAudioBuffer(this.sampleRate, channelData);
+    },
 
-Target.prototype = {
-    copyToBuffer: function (destination) {
-        var offset = 0;
-        var outl = destination.getChannelData(0);
-        var outr = destination.getChannelData(1);
-        this._buffers.forEach(function (source) {
-            var inl = source.getChannelData(0);
-            var inr = source.getChannelData(1);
+    extract: function (target, length, startPosition) {
+        var slice = this.slice(startPosition, startPosition + length);
+        target.set(slice);
+        return slice.length;
+    },
 
-            for (var i = 0; i < inl.length; i++) {
-                outl[i + offset] = inl[i];
-                outr[i + offset] = inr[i];
-            }
-            offset += inl.length;
-        })
+    set: function (buffer, offset) {
+        for (var i = 0; i < this.numberOfChannels; i++) {
+            this.getChannelData(i).set(buffer.getChannelData(i), offset);
+        }
     }
 };
+
+_.extend(AudioBuffer.prototype, BufferMethods);
 
 function FakeAudioBuffer(sampleRate, channelData) {
     this._sampleRate = sampleRate;
     this._channelData = channelData;
+}
+
+FakeAudioBuffer.createEmpty = function(numberOfChannels, length, sampleRate) {
+    var channelData = [];
+    var i;
+    for (i = 0; i < numberOfChannels; i++) {
+        channelData.push(new Float32Array(length));
+    }
+    return new FakeAudioBuffer(sampleRate, channelData);
 }
 
 FakeAudioBuffer.prototype = {
@@ -51,13 +57,13 @@ FakeAudioBuffer.prototype = {
     get sampleRate() {
         return this._sampleRate;
     },
-    
+
     getChannelData: function (channel) {
         return this._channelData[channel];
     }
 };
 
-FakeAudioBuffer.prototype.extract = AudioBuffer.prototype.extract;
+_.extend(FakeAudioBuffer.prototype, BufferMethods);
 
 function AudioBufferSampleSource(audioBuffer) {
     this._audioBuffer = audioBuffer;
@@ -67,11 +73,11 @@ AudioBufferSampleSource.prototype = {
     extract: function (target, length, startPosition) {
         return this._audioBuffer.extract(target, length, startPosition);
     },
-    
+
     toSourcePosition: function (position) {
         return position;
     },
-    
+
     get length() {
         return this._audioBuffer.length;
     }
@@ -105,27 +111,22 @@ RangeSampleSource.prototype = {
     }
 };
 
-
 function SampleSourcePlayer(context, bufferSize) {
     this._context = context;
     this.playing = false;
     this._offset = 0;
     this._jsNode = context.createJavaScriptNode(bufferSize, 1, 0);
     this._jsNode.onaudioprocess = _.bind(function (e) {
-        var target = new Target();
-        var length = this._sampleSource.extract(target, bufferSize, this._offset);
+        var length = this._sampleSource.extract(e.outputBuffer, bufferSize, this._offset);
         var finished = false;
-        target.copyToBuffer(e.outputBuffer);
-        
+
         if (length < bufferSize) {
             // TODO event
-            // this cuts off the end of the source 
-            console.log(length, '<', bufferSize);
+            // this cuts off the end of the source
             this.stop();
         }
         this._offset += bufferSize;
     }, this);
-    // TODO
 
     this.positionOffset = 0;
 }
@@ -210,12 +211,15 @@ SourceList.prototype = {
         while (!this.finished && framesRead < length) {
             var framesLeft = this.sli.endOffset - this.outputPosition;
             var framesToRead = Math.min(framesLeft, length - framesRead);
+            if (framesRead) {
+                target = target.slice(framesRead);
+            }
             this.sli.extract(target, framesToRead, this.outputPosition);
 
             framesRead += framesToRead;
             this.outputPosition += framesToRead;
             if (this.outputPosition == this.sli.endOffset) {
-                
+
                 if (this.sli.index == this._sources.length - 1) {
                     this.finished = true;
                 }
@@ -256,9 +260,3 @@ SourceList.prototype = {
         return this.positionSli.index;
     }
 };
-
-function SpeedChangingSampleSource() {
-    this._sampleSource = null;
-    this._playbackSpeed = 1;
-    this._phase = 0;
-}
