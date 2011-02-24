@@ -11,7 +11,7 @@ var BufferMethods = {
         var i;
         var end = end || this.length;
         for (i = 0; i < this.numberOfChannels; i++) {
-            channelData.push(this.getChannelData(i).slice(begin, end));
+            channelData.push(this.getChannelData(i).subarray(begin, end));
         }
         return new FakeAudioBuffer(this.sampleRate, channelData);
     },
