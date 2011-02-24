@@ -211,10 +211,8 @@ SourceList.prototype = {
         while (!this.finished && framesRead < length) {
             var framesLeft = this.sli.endOffset - this.outputPosition;
             var framesToRead = Math.min(framesLeft, length - framesRead);
-            if (framesRead) {
-                target = target.slice(framesRead);
-            }
-            this.sli.extract(target, framesToRead, this.outputPosition);
+            var currentFramesRead = this.sli.extract(target, framesToRead, this.outputPosition);
+            target = target.slice(currentFramesRead);
 
             framesRead += framesToRead;
             this.outputPosition += framesToRead;
