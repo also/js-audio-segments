@@ -111,19 +111,25 @@ RangeSampleSource.prototype = {
     }
 };
 
-function SampleSourcePlayer(context, bufferSize) {
-    this._context = context;
+function SampleSourceNode(context, bufferSize) {
     this.playing = false;
     this._offset = 0;
     this._jsNode = context.createJavaScriptNode(bufferSize, 0, 1);
+
+    var finished = false;
+
     this._jsNode.onaudioprocess = _.bind(function (e) {
+        if (finished) {
+            return;
+        }
         var length = this._sampleSource.extract(e.outputBuffer, bufferSize, this._offset);
-        var finished = false;
 
         if (length < bufferSize) {
-            // TODO event
-            // this cuts off the end of the source
-            this.stop();
+            finished = true;
+            // TODO wait for context to play
+            if (this.onfinish) {
+                this.onfinish();
+            }
         }
         this._offset += bufferSize;
     }, this);
@@ -131,28 +137,43 @@ function SampleSourcePlayer(context, bufferSize) {
     this.positionOffset = 0;
 }
 
-SampleSourcePlayer.prototype = {
+SampleSourceNode.prototype = {
     set sampleSource(sampleSource) {
         this._sampleSource = sampleSource;
     },
 
-     start: function() {
+     connect: function () {
+         this._jsNode.connect.apply(this._jsNode, arguments);
          if (!this.playing) {
-             this._jsNode.connect(this._context.destination);
-             this.positionOffset = this._context.currentTime;
+             this.positionOffset = this.context.currentTime;
          }
          this.playing = true;
     },
 
-    stop: function() {
-      if (this.playing) {
-          this._jsNode.disconnect();
+    disconnect: function () {
+        this._jsNode.disconnect.apply(this._jsNode, arguments);
         this.playing = false;
-      }
+    },
+
+    get context() {
+        return this._jsNode.context;
+    },
+
+    get numberOfInputs() {
+        return this._jsNode.numberOfInputs;
+    },
+
+    get numberOfOutputs() {
+        return this._jsNode.numberOfOutputs;
+    },
+
+    get bufferSize() {
+        return this._jsNode.bufferSize;
     },
 
     get position() {
-        return Math.floor((this._context.position - this.positionOffset) * 44.1);
+        // TODO don't hardcode sample rate
+        return Math.floor((this.context.position - this.positionOffset) * 44.1);
     },
 
     get sourcePosition() {
@@ -161,6 +182,26 @@ SampleSourcePlayer.prototype = {
 
     get sourceLength() {
       return this._sampleSource.length;
+    }
+};
+
+function SampleSourcePlayer(context, bufferSize) {
+    this._node = new SampleSourceNode(context, bufferSize);
+    this._node.onfinish = _.bind(this.stop, this);
+    this._context = context;
+}
+
+SampleSourcePlayer.prototype = {
+    set sampleSource(sampleSource) {
+        this._node.sampleSource = sampleSource;
+    },
+
+     start: function () {
+         this._node.connect(this._context.destination);
+    },
+
+    stop: function () {
+      this._node.disconnect();
     }
 };
 
