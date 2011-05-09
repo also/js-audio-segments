@@ -115,7 +115,7 @@ function SampleSourcePlayer(context, bufferSize) {
     this._context = context;
     this.playing = false;
     this._offset = 0;
-    this._jsNode = context.createJavaScriptNode(bufferSize, 1, 0);
+    this._jsNode = context.createJavaScriptNode(bufferSize, 1, 1);
     this._jsNode.onaudioprocess = _.bind(function (e) {
         var length = this._sampleSource.extract(e.outputBuffer, bufferSize, this._offset);
         var finished = false;
