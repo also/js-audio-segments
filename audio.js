@@ -1,6 +1,6 @@
 window.AudioContext = webkitAudioContext;
 
-window.AudioBuffer = new AudioContext().createBuffer(0, 0, 0).constructor;
+window.AudioBuffer = new AudioContext().createBuffer(1, 1, 22050).constructor;
 
 function AudioBufferSampleSource(audioBuffer) {
     this._audioBuffer = audioBuffer;
